@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ロカレコ - お気に入り周辺検索</title>
+    <style>
+        :root {
+            --primary-color: #ff6b6b;
+            --bg-color: #f8f9fa;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: var(--primary-color);
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        .subtitle {
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+        .btn {
+            display: block;
+            width: 100%;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .btn:active {
+            transform: scale(0.98);
+        }
+        .status {
+            text-align: center;
+            font-size: 14px;
+            color: #555;
+            margin-bottom: 15px;
+        }
+        .shop-card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border-left: 5px solid var(--primary-color);
+        }
+        .shop-name {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .shop-meta {
+            font-size: 13px;
+            color: #777;
+            margin-bottom: 8px;
+        }
+        .badge {
+            display: inline-block;
+            background: #ffe3e3;
+            color: var(--primary-color);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+        .shop-comment {
+            font-size: 14px;
+            color: #444;
+            background: #f1f3f5;
+            padding: 8px;
+            border-radius: 6px;
+            margin-top: 5px;
+        }
+        .distance {
+            float: right;
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>ロカレコ 📍</h1>
+    <div class="subtitle">あなたのお気に入りから近くの店を提案</div>
+
+    <button class="btn" onclick="getMyLocation()">現在地からおすすめを探す</button>
+    <div id="status" class="status">ボタンを押して検索を開始してください</div>
+
+    <div id="result-list">
+        <!-- ここに検索結果のカードが自動で入ります -->
+    </div>
+</div>
+
+<script>
+// 1. あなたの「お気に入り・行ってみたい店」のデータ（ここに好きなだけ追加できます！）
+// 緯度(lat)と経度(lng)は、Googleマップでピンを長押しすると表示される数字を入力します。
+const myFavoriteShops = [
+    {
+        name: "麺屋 はやぶさ",
+        category: "ラーメン",
+        lat: 35.1706, // サンプル：名古屋駅付近の座標
+        lng: 136.8834,
+        comment: "こってり系の濃厚スープが絶品。仕事帰りのご褒美に。"
+    },
+    {
+        name: "おちついた古民家カフェ",
+        category: "カフェ",
+        lat: 35.1740,
+        lng: 136.8990,
+        comment: "静かで作業に最適。コーヒーとベイクドチーズケーキがおすすめ。"
+    },
+    {
+        name: "洋食のみどり亭",
+        category: "洋食",
+        lat: 35.1610,
+        lng: 136.8880,
+        comment: "レトロな雰囲気。ジューシーなハンバーグが絶品。"
+    }
+];
+
+// 2. 2つの座標（現在地とお気に入り）の間の直線距離を計算する関数（三平方の定理の簡易版）
+function calculateDistance(lat1, lng1, lat2, lng2) {
+    const R = 6371000; // 地球の半径 (m)
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Math.round(R * c); // メートル単位で返す
+}
+
+// 3. スマホのGPSから現在地を取得する関数
+function getMyLocation() {
+    const statusDiv = document.getElementById('status');
+    const resultList = document.getElementById('result-list');
+    resultList.innerHTML = '';
+
+    if (!navigator.geolocation) {
+        statusDiv.innerText = "お使いのブラウザはGPSに対応していません。";
+        return;
+    }
+
+    statusDiv.innerText = "現在地を取得中...";
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            const userLat = position.coords.latitude;
+            const userLng = position.coords.longitude;
+            statusDiv.innerText = "周辺のお気に入り店を計算中...";
+            
+            showRecommendations(userLat, userLng);
+        },
+        (error) => {
+            statusDiv.innerText = "現在地を取得できませんでした。設定で位置情報を許可してください。";
+            console.error(error);
+        }
+    );
+}
+
+// 4. 計算結果を画面に表示する関数
+function showRecommendations(userLat, userLng) {
+    const statusDiv = document.getElementById('status');
+    const resultList = document.getElementById('result-list');
+    
+    // 各店との距離を計算して配列に追加
+    const calculatedShops = myFavoriteShops.map(shop => {
+        const distance = calculateDistance(userLat, userLng, shop.lat, shop.lng);
+        return { ...shop, distance };
+    });
+
+    // 距離が近い順に並び替え
+    calculatedShops.sort((a, b) => a.distance - b.distance);
+
+    statusDiv.innerText = `近くの店が ${calculatedShops.length} 件見つかりました！`;
+
+    // 画面にカードを生成
+    calculatedShops.forEach(shop => {
+        const distanceStr = shop.distance >= 1000 
+            ? `${(shop.distance / 1000).toFixed(1)} km` 
+            : `${shop.distance} m`;
+
+        const card = document.createElement('div');
+        card.className = 'shop-card';
+        card.innerHTML = `
+            <span class="distance">📍 ${distanceStr}</span>
+            <div class="shop-name">${shop.name}</div>
+            <div class="shop-meta">
+                <span class="badge">${shop.category}</span>
+            </div>
+            <div class="shop-comment">${shop.comment}</div>
+        `;
+        resultList.appendChild(card);
+    });
+}
+</script>
+
+</body>
+</html>
