@@ -10,6 +10,7 @@
             --bg-color: #f8f9fa;
             --card-bg: #ffffff;
             --text-color: #333333;
+            --accent-color: #4dadf7;
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -40,13 +41,14 @@
             background-color: var(--primary-color);
             color: white;
             border: none;
-            padding: 12px;
+            padding: 15px;
             border-radius: 8px;
             font-size: 16px;
             font-weight: bold;
             cursor: pointer;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             margin-bottom: 20px;
+            transition: background 0.2s;
         }
         .btn:active {
             transform: scale(0.98);
@@ -56,19 +58,23 @@
             font-size: 14px;
             color: #555;
             margin-bottom: 15px;
+            font-weight: bold;
         }
         .shop-card {
             background: var(--card-bg);
             border-radius: 12px;
             padding: 15px;
             margin-bottom: 15px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
             border-left: 5px solid var(--primary-color);
+            position: relative;
+            overflow: hidden;
         }
         .shop-name {
             font-size: 18px;
             font-weight: bold;
             margin-bottom: 5px;
+            padding-right: 80px;
         }
         .shop-meta {
             font-size: 13px;
@@ -89,14 +95,41 @@
             font-size: 14px;
             color: #444;
             background: #f1f3f5;
-            padding: 8px;
+            padding: 10px;
             border-radius: 6px;
-            margin-top: 5px;
+            margin-top: 8px;
+            margin-bottom: 12px;
+            line-height: 1.4;
         }
         .distance {
-            float: right;
+            position: absolute;
+            top: 15px;
+            right: 15px;
             color: var(--primary-color);
             font-weight: bold;
+            font-size: 15px;
+        }
+        .map-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            background-color: #fff;
+            color: #444;
+            border: 1px solid #ced4da;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .map-btn:hover {
+            background-color: #e9ecef;
+        }
+        .map-btn span {
+            margin-right: 6px;
         }
     </style>
 </head>
@@ -107,7 +140,7 @@
     <div class="subtitle">あなたのお気に入りから近くの店を提案</div>
 
     <button class="btn" onclick="getMyLocation()">現在地からおすすめを探す</button>
-    <div id="status" class="status">ボタンを押して検索を開始してください</div>
+    <div id="status" class="status">ボタンを押して位置情報を許可してください</div>
 
     <div id="result-list">
         <!-- ここに検索結果のカードが自動で入ります -->
@@ -115,33 +148,34 @@
 </div>
 
 <script>
-// 1. あなたの「お気に入り・行ってみたい店」のデータ（ここに好きなだけ追加できます！）
-// 緯度(lat)と経度(lng)は、Googleマップでピンを長押しすると表示される数字を入力します。
+// 1. あなたの「お気に入り・行ってみたい店」のリスト
+// ※テスト用として、愛知県春日井市付近の架空の店（と座標）を入れています。
+// ご自身のお気に入りのお店に合わせて、ここを書き換えてください。
 const myFavoriteShops = [
     {
-        name: "麺屋 はやぶさ",
+        name: "春日井まぜそば 鳳凰",
         category: "ラーメン",
-        lat: 35.1706, // サンプル：名古屋駅付近の座標
-        lng: 136.8834,
-        comment: "こってり系の濃厚スープが絶品。仕事帰りのご褒美に。"
+        lat: 35.2450, 
+        lng: 136.9720,
+        comment: "ピリ辛のミンチと濃厚なタレが太麺に絡んで最高。ニンニクマシマシがおすすめ！"
     },
     {
-        name: "おちついた古民家カフェ",
+        name: "Cafe & Bakery グリーンプレイス",
         category: "カフェ",
-        lat: 35.1740,
-        lng: 136.8990,
-        comment: "静かで作業に最適。コーヒーとベイクドチーズケーキがおすすめ。"
+        lat: 35.2510,
+        lng: 136.9650,
+        comment: "テラス席が気持ちいい隠れ家カフェ。焼きたてのクロワッサンが絶品。"
     },
     {
-        name: "洋食のみどり亭",
+        name: "キッチンみどり亭",
         category: "洋食",
-        lat: 35.1610,
-        lng: 136.8880,
-        comment: "レトロな雰囲気。ジューシーなハンバーグが絶品。"
+        lat: 35.2380,
+        lng: 136.9810,
+        comment: "昔ながらのデミグラスハンバーグ。肉汁が溢れてジューシーです。"
     }
 ];
 
-// 2. 2つの座標（現在地とお気に入り）の間の直線距離を計算する関数（三平方の定理の簡易版）
+// 2. 2つの座標間の距離（メートル）を計算する関数
 function calculateDistance(lat1, lng1, lat2, lng2) {
     const R = 6371000; // 地球の半径 (m)
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -150,58 +184,71 @@ function calculateDistance(lat1, lng1, lat2, lng2) {
               Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
               Math.sin(dLng / 2) * Math.sin(dLng / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return Math.round(R * c); // メートル単位で返す
+    return Math.round(R * c);
 }
 
-// 3. スマホのGPSから現在地を取得する関数
+// 3. GPSから現在地を取得する関数
 function getMyLocation() {
     const statusDiv = document.getElementById('status');
     const resultList = document.getElementById('result-list');
     resultList.innerHTML = '';
 
     if (!navigator.geolocation) {
-        statusDiv.innerText = "お使いのブラウザはGPSに対応していません。";
+        statusDiv.innerText = "🚨 お使いの端末はGPSに対応していません。";
         return;
     }
 
-    statusDiv.innerText = "現在地を取得中...";
+    statusDiv.innerText = "🔄 現在地を取得中（スマホの許可ボタンを押してください）...";
+
+    // 高精度な位置情報を要求
+    const options = {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+    };
 
     navigator.geolocation.getCurrentPosition(
         (position) => {
             const userLat = position.coords.latitude;
             const userLng = position.coords.longitude;
-            statusDiv.innerText = "周辺のお気に入り店を計算中...";
+            statusDiv.innerText = "⏳ 距離を計算して並び替え中...";
             
             showRecommendations(userLat, userLng);
         },
         (error) => {
-            statusDiv.innerText = "現在地を取得できませんでした。設定で位置情報を許可してください。";
+            statusDiv.innerText = "❌ 位置情報を取得できませんでした。ブラウザやスマホの設定で位置情報をオンにしてください。";
             console.error(error);
-        }
+        },
+        options
     );
 }
 
-// 4. 計算結果を画面に表示する関数
+// 4. 計算結果を画面に表示し、Googleマップへのリンクを生成する関数
 function showRecommendations(userLat, userLng) {
     const statusDiv = document.getElementById('status');
     const resultList = document.getElementById('result-list');
     
-    // 各店との距離を計算して配列に追加
+    // 各店との距離を計算
     const calculatedShops = myFavoriteShops.map(shop => {
         const distance = calculateDistance(userLat, userLng, shop.lat, shop.lng);
         return { ...shop, distance };
     });
 
-    // 距離が近い順に並び替え
+    // 【ここがポイント！】近い順（距離が小さい順）に並び替え
     calculatedShops.sort((a, b) => a.distance - b.distance);
 
-    statusDiv.innerText = `近くの店が ${calculatedShops.length} 件見つかりました！`;
+    statusDiv.innerText = `🎉 現在地から近い順に ${calculatedShops.length} 件を表示中`;
 
-    // 画面にカードを生成
+    // 画面にショップカードを追加
     calculatedShops.forEach(shop => {
+        // 1km以上なら「km」、未満なら「m」で表示を綺麗にする
         const distanceStr = shop.distance >= 1000 
             ? `${(shop.distance / 1000).toFixed(1)} km` 
             : `${shop.distance} m`;
+
+        // 【ここがポイント！】現在地からその店までのGoogleマップルート検索URLを生成
+        // アプリが入っていれば自動的にGoogleマップアプリが立ち上がります
+        const googleMapUrl = `https://www.google.com/maps/dir/?api=1&origin=${userLat},${userLng}&destination=${shop.lat},${shop.lng}&travelmode=walking`;
 
         const card = document.createElement('div');
         card.className = 'shop-card';
@@ -212,6 +259,9 @@ function showRecommendations(userLat, userLng) {
                 <span class="badge">${shop.category}</span>
             </div>
             <div class="shop-comment">${shop.comment}</div>
+            <a href="${googleMapUrl}" target="_blank" rel="noopener noreferrer" class="map-btn">
+                <span>🚗</span> Googleマップでルートを見る
+            </a>
         `;
         resultList.appendChild(card);
     });
